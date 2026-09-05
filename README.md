@@ -20,6 +20,8 @@ pyserial (optional automated test)
   Tera Term
 - Full RTL → synthesis → implementation → timing/power sign-off flow
 
+![overview](docs/overview.jpg)
+
 ## Results (Vivado, Basys3 / xc7a35tcpg236-1)
 
 *Timing*:
@@ -32,6 +34,8 @@ pyserial (optional automated test)
 | Failing endpoints | 0 / 177 (setup & hold) |
 | Estimated Fmax | ~211 MHz |
 
+![timing results](docs/timing.jpg)
+
 *Power*:
 
 | Metric | Result |
@@ -40,6 +44,8 @@ pyserial (optional automated test)
 | Dynamic Power | 0.001 W |
 | Device Static Power | 0.072 W |
 | Junction Temperature | 25.4 °C |
+
+![power summary](docs/power.jpg)
 
 *Resource Utilization*:
 
@@ -50,7 +56,7 @@ pyserial (optional automated test)
 | Slices | 40 |
 | Bonded I/O | 28 |
 
-(Screenshots of the Vivado timing summary, power report, and utilization hierarchy are in [/reports](./reports) — add your images there.)
+![resource utilization](docs/resource.jpg)
 
 ## What it does
 
@@ -105,6 +111,8 @@ pins to the FTDI USB bridge).
 └── README.md
 ```
 
+![image of basys3](docs/basys3)
+
 ## How to build
 
 1. Open Vivado → create an RTL project, part `xc7a35tcpg236-1` (Basys3).
@@ -138,7 +146,3 @@ serial communication (half-duplex vs full-duplex) · synchronous design &
 metastability handling (input synchronizers) · Vivado synthesis &
 implementation flow · static timing analysis · power analysis · FPGA
 hardware bring-up and debug (Tera Term)
-
-## Author
-
-[Your name] — Final-year B.Tech ECE, preparing for GATE 2027 | [LinkedIn] | [Email]
