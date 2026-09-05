@@ -1,51 +1,28 @@
-# Half-Duplex UART Communication Controller — Basys3 FPGA
+# Half-Duplex UART Communication Controller — Basys3 (Verilog / Vivado)
 
-**Verilog HDL · Xilinx Vivado · Artix-7 (Basys3)**
+A from-scratch UART transmitter/receiver core and a half-duplex PC↔FPGA
+communication protocol, implemented in Verilog and verified on a Digilent
+Basys3 (Xilinx Artix-7) board.
 
-A from-scratch UART transmitter/receiver core and protocol controller, implemented and timing-closed on the Basys3 FPGA, with a PC-side Python test harness for end-to-end hardware validation.
+**Toolchain:** Xilinx Vivado (RTL, synthesis, implementation, timing/power
+analysis) · Tera Term (hardware bring-up / manual serial testing) · Python +
+pyserial (optional automated test)
 
 ---
 
-## Overview
+## Highlights
 
-This project implements a **half-duplex serial communication link** between a PC and an FPGA over the Basys3's onboard USB-UART bridge. Rather than a plain "echo" UART demo, it layers a small request/response protocol on top of the UART core so the FPGA and PC take strict turns — the FPGA never transmits while it is still receiving a command, and never begins a reply until a full command has been received.
+- Custom UART TX/RX cores built at the RTL level — no IP catalog block used
+- Half-duplex protocol enforced in a dedicated FSM (turn-taking between PC
+  and FPGA, not just raw byte pass-through)
+- Design closes timing with **zero failing endpoints** at 100 MHz
+- Verified on real hardware over the Basys3's onboard USB-UART bridge using
+  Tera Term
+- Full RTL → synthesis → implementation → timing/power sign-off flow
 
-The FPGA reads its onboard switches and drives its LEDs in response to PC commands, giving a simple, verifiable demonstration of register-style read/write access over a serial link — the same pattern used in real embedded telemetry/debug interfaces.
+## Results (Vivado, Basys3 / xc7a35tcpg236-1)
 
-## Key Features
-
-- Custom UART TX and RX cores written from scratch in Verilog (no IP catalog blocks) — start/stop bit framing, mid-bit sampling, and 2-flop input synchronization for metastability protection
-- Protocol-level half-duplex enforcement via a dedicated FSM (turn-taking, not simultaneous TX/RX)
-- Simple command set: read switch states, write LED byte, ACK/NACK for unknown commands
-- Self-checking Verilog testbench (Vivado XSIM)
-- PC-side Python (`pyserial`) test script for real hardware validation
-- Fully timing-closed and implemented for the Basys3 (Artix-7 `xc7a35tcpg236-1`)
-
-## Communication Protocol
-
-| PC → FPGA | FPGA action | FPGA → PC |
-|---|---|---|
-| `'R'` (0x52) | Read slide switches | 1 byte = `SW[7:0]` |
-| `'W'` (0x57) + 1 data byte | Write byte to LEDs | ACK (`0x06`) |
-| Any other byte | — | NACK (`0x15`) |
-
-8N1 framing, 9600 baud (parameterized — easily retargeted to a higher baud rate).
-
-## Repository Structure
-
-```
-uart_tx.v                  UART transmitter core
-uart_rx.v                  UART receiver core
-uart_half_duplex_top.v     Top-level module: protocol FSM + I/O
-basys3_uart.xdc            Pin constraints for Basys3
-tb_uart_half_duplex.v      Self-checking testbench
-test_uart.py               PC-side test script (pyserial)
-README.md                  This file
-```
-
-## Results (Vivado , Basys3 / xc7a35tcpg236-1)
-
-**Timing** — 100 MHz system clock, all constraints met, 0 failing endpoints:
+*Timing*:
 
 | Metric | Result |
 |---|---|
@@ -55,7 +32,7 @@ README.md                  This file
 | Failing endpoints | 0 / 177 (setup & hold) |
 | Estimated Fmax | ~211 MHz |
 
-**Power** (implemented netlist, vectorless estimate):
+*Power*:
 
 | Metric | Result |
 |---|---|
@@ -64,7 +41,7 @@ README.md                  This file
 | Device Static Power | 0.072 W |
 | Junction Temperature | 25.4 °C |
 
-**Resource Utilization**:
+*Resource Utilization*:
 
 | Resource | Used |
 |---|---|
@@ -73,41 +50,95 @@ README.md                  This file
 | Slices | 40 |
 | Bonded I/O | 28 |
 
-*(Screenshots of the Vivado timing summary, power report, and utilization hierarchy are in [`/reports`](./reports) — add your images there.)*
+(Screenshots of the Vivado timing summary, power report, and utilization hierarchy are in [/reports](./reports) — add your images there.)
 
-## Verification
+## What it does
 
-- **Simulation:** self-checking testbench (`tb_uart_half_duplex.v`) drives simulated PC-side bytes into the RX core and checks the FSM's replies against the protocol table above, run in Vivado's behavioral simulator (XSIM).
-  *(Add your pass/fail count and a waveform screenshot here once run — e.g. "3/3 test cases passed.")*
-- **Hardware validation:** tested on physical Basys3 hardware against `test_uart.py`, confirming switch readback and LED write-back over the onboard USB-UART bridge.
-  *(Add a short note or terminal screenshot of a real test run here.)*
+The FPGA and a PC exchange data over a strict **request → response,
+take-turns** protocol on the board's onboard USB-UART bridge (9600 baud,
+8N1):
 
-## Getting Started
+| PC sends | FPGA action | FPGA replies |
+|---|---|---|
+| `'R'` (0x52) | Reads the 8 slide switches | 1 byte = `SW[7:0]` |
+| `'W'` (0x57) + 1 data byte | Writes that byte to the LEDs | ACK (`0x06`) |
+| Anything else | — | NACK (`0x15`) |
 
-### Simulate
-1. Open Vivado, create a project targeting the Basys3 part.
-2. Add `uart_tx.v`, `uart_rx.v`, `uart_half_duplex_top.v` as design sources; add `tb_uart_half_duplex.v` as a simulation source.
-3. Run Behavioral Simulation and check the Tcl console output.
+The FPGA never starts replying until it has fully received the current
+command, and ignores incoming bytes while it's transmitting — that's the
+half-duplex enforcement, done at the protocol/FSM level rather than by
+sharing a physical wire (the Basys3's onboard TX/RX are separate physical
+pins to the FTDI USB bridge).
 
-### Build for hardware
-1. Add `basys3_uart.xdc` as a constraints file; set `uart_half_duplex_top` as the top module.
-2. Run Synthesis → Implementation → Generate Bitstream.
-3. Program the Basys3.
+## Architecture
 
-### Test on hardware
-```bash
-pip install pyserial
-python test_uart.py <your-serial-port>   # e.g. COM5 or /dev/ttyUSB1
+```
+                ┌─────────────────────────────┐
+   PC (Tera     │      uart_half_duplex_top    │
+   Term) ──TXD─▶│  ┌────────┐                  │
+                │  │uart_rx │──▶ protocol FSM ──┼──▶ LEDs
+                │  └────────┘        │          │
+                │                    ▼          │
+                │              switches ─────────┼──▶ (read on 'R')
+                │  ┌────────┐        │          │
+   PC (Tera     │◀─│uart_tx │◀───────┘          │
+   Term) ◀─RXD──│  └────────┘                  │
+                └─────────────────────────────┘
 ```
 
-## Skills Demonstrated
+- **`uart_rx.v`** — receiver: 2-flop input synchronizer, start-bit
+  mid-point detection, 8 data bits sampled mid-period, stop-bit / framing
+  check
+- **`uart_tx.v`** — transmitter: start → 8 data bits → stop bit shifter
+- **`uart_half_duplex_top.v`** — protocol FSM, command decode, switch/LED I/O
 
-Verilog HDL · RTL design · Finite state machines · UART/serial protocol design · Xilinx Vivado (synthesis, implementation, timing & power analysis) · Constraint (XDC) authoring · Testbench development & simulation · Python (pyserial) hardware bring-up · FPGA-to-PC interfacing
+## Repository structure
 
-## Possible Extensions
+```
+├── uart_tx.v                  # UART transmitter core
+├── uart_rx.v                  # UART receiver core
+├── uart_half_duplex_top.v     # Top-level module + protocol FSM
+├── basys3_uart.xdc            # Pin constraints for Basys3
+├── tb_uart_half_duplex.v      # Self-checking Vivado behavioral testbench
+├── test_uart.py               # Optional PC-side automated test (pyserial)
+├── docs/                      # Timing / power / utilization report screenshots
+└── README.md
+```
 
-- Checksum/parity byte for error detection
-- Timeout handling for dropped frames
-- Physically shared single-wire (RS-485-style) variant for board-to-board half-duplex
+## How to build
 
----
+1. Open Vivado → create an RTL project, part `xc7a35tcpg236-1` (Basys3).
+2. Add `uart_tx.v`, `uart_rx.v`, `uart_half_duplex_top.v` as **design
+   sources**; set `uart_half_duplex_top` as top.
+3. Add `basys3_uart.xdc` as the constraints file.
+4. Add `tb_uart_half_duplex.v` as a **simulation** source and run
+   Behavioral Simulation to check protocol correctness before generating a
+   bitstream.
+5. Run Synthesis → Implementation → generate bitstream → program the board.
+
+## How to test on hardware (Tera Term)
+
+1. Connect the Basys3 via USB and program the bitstream.
+2. Open Tera Term → New connection → Serial → select the Basys3's UART COM
+   port.
+3. Setup → Serial port: **9600 baud, 8 data bits, no parity, 1 stop bit**.
+4. Type `R` — the FPGA returns one byte reflecting the current switch
+   positions. Flip switches and repeat to confirm.
+5. Type `W` followed by one data byte — the FPGA writes it to the LEDs and
+   returns `0x06` (ACK). Sending an unrecognized command returns `0x15`
+   (NACK).
+
+*(A `test_uart.py` script is also included for scripted testing via
+pyserial, as an alternative to manual Tera Term entry.)*
+
+## Skills demonstrated
+
+Verilog HDL · RTL design · finite state machines · UART protocol design ·
+serial communication (half-duplex vs full-duplex) · synchronous design &
+metastability handling (input synchronizers) · Vivado synthesis &
+implementation flow · static timing analysis · power analysis · FPGA
+hardware bring-up and debug (Tera Term)
+
+## Author
+
+[Your name] — Final-year B.Tech ECE, preparing for GATE 2027 | [LinkedIn] | [Email]
