@@ -111,7 +111,7 @@ pins to the FTDI USB bridge).
 └── README.md
 ```
 
-![image of basys3](docs/basys3)
+![image of basys3](docs/basys3.jpg)
 
 ## How to build
 
